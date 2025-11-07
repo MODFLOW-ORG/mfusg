@@ -136,7 +136,6 @@ jobs:
         with:
           path: ${{ env.PROGRAM_NAME }}
 
-
       - name: Extract version number from the main meson.build file
         working-directory: ${{ env.PROGRAM_NAME }}
         run: |
