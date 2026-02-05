@@ -1,14 +1,9 @@
 
 # MODFLOW-USG
 
-
+[![mfusg checks](https://github.com/MODFLOW-ORG/mfusg/actions/workflows/ci.yml/badge.svg)](https://github.com/MODFLOW-ORG/mfusg/actions/workflows/ci.yml)
 
 [USGS Release Page](https://water.usgs.gov/ogw/mfusg)
-
-## Automated Testing Status on Travis-CI
-
-### Version 1.4.01 develop
-[![Build Status](https://travis-ci.com/MODFLOW-USGS/mfusg.svg?branch=develop)](https://travis-ci.com/MODFLOW-USGS/mfusg)
 
 ## Introduction
 

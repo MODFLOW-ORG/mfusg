@@ -1,4 +1,4 @@
-name: mfusg compiler checks
+name: mfusg checks
 on:
   # run at 6 AM UTC every day
   schedule:
@@ -26,10 +26,10 @@ jobs:
           # test latest gcc
           - {os: ubuntu-latest, compiler: gcc, version: 13, shell: bash, release: no}
           - {os: macos-14, compiler: gcc, version: 13, shell: bash, release: yes}
+          - {os: macos-15-intel, compiler: gcc, version: 13, shell: bash, release: yes}
           - {os: windows-latest, compiler: gcc, version: 13, shell: pwsh, release: no}
           # test intel-classic
           - {os: ubuntu-22.04, compiler: intel-classic, version: 2021.7, shell: bash, release: no}
-          - {os: macos-15-intel, compiler: intel-classic, version: 2021.6, shell: bash, release: yes}
           # test previous gcc
           - {os: ubuntu-latest, compiler: gcc, version: 12, shell: bash, release: no}
           - {os: ubuntu-latest, compiler: gcc, version: 11, shell: bash, release: no}
@@ -64,6 +64,26 @@ jobs:
         run: |
           echo "ostag=$(pixi run get-ostag)" >> $GITHUB_ENV
 
+      # static link gfortran libs
+      - name: Hide dylibs (macOS)
+        if: runner.os == 'macOS'
+        working-directory: ${{ env.PROGRAM_NAME }}
+        run: |
+          version="${{ matrix.version }}"
+          brew_prefix="$(brew --prefix)"
+          libpath="$brew_prefix/opt/gcc@$version/lib/gcc/$version"
+          mv $libpath/libgcc_s.1.1.dylib $libpath/libgcc_s.1.1.dylib.bak
+          mv $libpath/libgfortran.5.dylib $libpath/libgfortran.5.dylib.bak
+          mv $libpath/libquadmath.0.dylib $libpath/libquadmath.0.dylib.bak
+          mv $libpath/libstdc++.6.dylib $libpath/libstdc++.6.dylib.bak
+
+      # static link libgcc
+      - name: Set LDFLAGS (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ldflags="$LDFLAGS -static-libgcc"
+          echo "LDFLAGS=$ldflags" >> $GITHUB_ENV
+
       - name: Build single precision version of ${{ env.PROGRAM_NAME }}
         working-directory: ${{ env.PROGRAM_NAME }}
         run: |
@@ -76,6 +96,15 @@ jobs:
           pixi run setup builddir-dble -Ddouble=true
           pixi run build builddir-dble
 
+      - name: Check architecture (macOS)
+        working-directory: ${{ env.PROGRAM_NAME }}/bin
+        if: runner.os == 'macOS'
+        run: |
+          otool -L mfusg
+          otool -L mfusgdbl
+          lipo -info mfusg
+          lipo -info mfusgdbl
+
       - name: Show build log
         if: failure()
         working-directory: ${{ env.PROGRAM_NAME }}
@@ -85,7 +114,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: meson-log.txt
+          name: ${{ matrix.os }}-${{ matrix.compiler}}-${{ matrix.version }}-meson-log.txt
           path: ${{ env.PROGRAM_NAME }}/builddir/meson-logs/meson-log.txt
 
       - name: Create source zip file on Linux
