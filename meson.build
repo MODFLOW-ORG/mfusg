@@ -27,6 +27,7 @@ fc_id = fc.get_id()
 message('Compiler ID:', fc_id)
 compile_args = []
 link_args = []
+extra_deps = []
 
 # Command line options for gfortran
 if fc_id == 'gcc'
@@ -58,6 +59,12 @@ if fc_id == 'gcc'
     compile_args += '-D__APPLE__'
   elif system == 'windows'
     compile_args += '-D_WIN32'
+  endif
+
+  # Link quadmath library on macOS (required for gfortran runtime)
+  if host_machine.system() == 'darwin'
+    quadmath_dep = fc.find_library('quadmath', required: true, static: true)
+    extra_deps += [quadmath_dep]
   endif
 endif
 
