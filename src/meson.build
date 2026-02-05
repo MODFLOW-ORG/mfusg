@@ -39,5 +39,5 @@ mfusg_sources = files(
 mfusg = executable(buildname,
                     mfusg_sources,
                     dependencies: extra_deps,
-                    link_language : 'fortran,
+                    link_language : 'fortran',
                     install: true)
