@@ -60,12 +60,6 @@ if fc_id == 'gcc'
   elif system == 'windows'
     compile_args += '-D_WIN32'
   endif
-
-  # Link quadmath library on macOS (required for gfortran runtime)
-  if host_machine.system() == 'darwin'
-    quadmath_dep = fc.find_library('quadmath', required: true, static: true)
-    extra_deps += [quadmath_dep]
-  endif
 endif
 
 # Command line options for ifort
