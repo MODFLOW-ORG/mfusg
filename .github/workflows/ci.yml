@@ -129,14 +129,14 @@ jobs:
         if: ${{ matrix.release == 'yes' && runner.os != 'Windows' }}
         working-directory: ${{ env.PROJ_NAME }}
         run: |
-          zip -r -j ${{ steps.ostag.outputs.ostag }}.zip bin/
+          zip -r -j "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip" bin/
           ls -lha *.zip
 
       - name: Create distribution archive (Windows)
         if: ${{ matrix.release == 'yes' && runner.os == 'Windows' }}
         working-directory: ${{ env.PROJ_NAME }}
         run: |
-          $ZipFileName = "${{ steps.ostag.outputs.ostag }}.zip"
+          $ZipFileName = "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip"
           Compress-Archive -Path "bin\*" -DestinationPath $ZipFileName
           ls *.zip
 
@@ -174,10 +174,10 @@ jobs:
         with:
           pattern: ${{ env.PROJ_NAME }}*
           merge-multiple: true
-          path: ${{ env.PROJ_NAME }}
+          path: ${{ env.PROJ_NAME }}/dists
 
       - name: List distribution files
-        run: ls -l ${{ env.PROJ_NAME }}
+        run: ls -l ${{ env.PROJ_NAME }}/dists
 
         # create new release if manual trigger
       - name: Create release
@@ -187,7 +187,7 @@ jobs:
           tag: v${{ steps.version.outputs.version }}
           name: ${{ env.PROJ_NAME }} ${{ steps.version.outputs.version }}
           body: ${{ env.LONG_NAME }} version ${{ steps.version.outputs.version }}
-          artifacts: "${{ env.PROJ_NAME }}/*"
+          artifacts: "${{ env.PROJ_NAME }}/dists/*"
           draft: false
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
