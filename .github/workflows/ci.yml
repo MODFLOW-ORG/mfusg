@@ -129,14 +129,14 @@ jobs:
         if: ${{ matrix.release == 'yes' && runner.os != 'Windows' }}
         working-directory: ${{ env.PROJ_NAME }}
         run: |
-          zip -r -j ${{ steps.ostag.outputs.ostag }}.zip bin/
+          zip -r -j "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip" bin/
           ls -lha *.zip
 
       - name: Create distribution archive (Windows)
         if: ${{ matrix.release == 'yes' && runner.os == 'Windows' }}
         working-directory: ${{ env.PROJ_NAME }}
         run: |
-          $ZipFileName = "${{ steps.ostag.outputs.ostag }}.zip"
+          $ZipFileName = "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip"
           Compress-Archive -Path "bin\*" -DestinationPath $ZipFileName
           ls *.zip
 
