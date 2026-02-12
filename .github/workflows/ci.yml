@@ -1,4 +1,4 @@
-name: mfusg checks
+name: mfusg CI/CD
 on:
   # run at 6 AM UTC every day
   schedule:
@@ -6,6 +6,7 @@ on:
   push:
   pull_request:
     branches:
+      - main
       - develop
   workflow_dispatch:
 concurrency:
@@ -13,11 +14,11 @@ concurrency:
   cancel-in-progress: true
 env:
   PIXI_BETA_WARNING_OFF: true
-  DIST: dist-path
-  PROGRAM_NAME: mfusg
+  PROJ_NAME: mfusg
+  LONG_NAME: MODFLOW USG
 jobs:
   build:
-    name: Build and Test on ${{ matrix.os }} with ${{ matrix.compiler }} ${{ matrix.version }}
+    name: ${{ matrix.os }} ${{ matrix.compiler }} ${{ matrix.version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -40,12 +41,12 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
     steps:
-      - name: Checkout ${{ env.PROGRAM_NAME }}
+      - name: Checkout ${{ env.PROJ_NAME }}
         uses: actions/checkout@v5
         with:
-          path: ${{ env.PROGRAM_NAME }}
+          path: ${{ env.PROJ_NAME }}
 
-      - name: Setup ${{ matrix.compiler }} ${{ matrix.version }} on ${{ matrix.os }}
+      - name: Setup ${{ matrix.compiler }} ${{ matrix.version }}
         uses: fortran-lang/setup-fortran@v1
         with:
           compiler: ${{ matrix.compiler}}
@@ -55,19 +56,19 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.9.2
         with:
           pixi-version: v0.41.4
-          manifest-path: "${{ env.PROGRAM_NAME }}/pixi.toml"
+          manifest-path: "${{ env.PROJ_NAME }}/pixi.toml"
 
-      - name: Set ostag
+      - name: Get ostag
         shell: bash
-        working-directory: ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
         id: ostag
         run: |
-          echo "ostag=$(pixi run get-ostag)" >> $GITHUB_ENV
+          echo "ostag=$(pixi run get-ostag)" >> $GITHUB_OUTPUT
 
       # static link gfortran libs
       - name: Hide dylibs (macOS)
         if: runner.os == 'macOS'
-        working-directory: ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
         run: |
           version="${{ matrix.version }}"
           brew_prefix="$(brew --prefix)"
@@ -84,20 +85,20 @@ jobs:
           ldflags="$LDFLAGS -static-libgcc"
           echo "LDFLAGS=$ldflags" >> $GITHUB_ENV
 
-      - name: Build single precision version of ${{ env.PROGRAM_NAME }}
-        working-directory: ${{ env.PROGRAM_NAME }}
+      - name: Build single precision
+        working-directory: ${{ env.PROJ_NAME }}
         run: |
           pixi run setup builddir
           pixi run build builddir
 
-      - name: Build double precision version of ${{ env.PROGRAM_NAME }}
-        working-directory: ${{ env.PROGRAM_NAME }}
+      - name: Build double precision
+        working-directory: ${{ env.PROJ_NAME }}
         run: |
           pixi run setup builddir-dble -Ddouble=true
           pixi run build builddir-dble
 
-      - name: Check architecture (macOS)
-        working-directory: ${{ env.PROGRAM_NAME }}/bin
+      - name: Check arch/deps (macOS)
+        working-directory: ${{ env.PROJ_NAME }}/bin
         if: runner.os == 'macOS'
         run: |
           otool -L mfusg
@@ -107,7 +108,7 @@ jobs:
 
       - name: Show build log
         if: failure()
-        working-directory: ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
         run: cat builddir/meson-logs/meson-log.txt
 
       - name: Upload build log
@@ -115,27 +116,27 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.compiler}}-${{ matrix.version }}-meson-log.txt
-          path: ${{ env.PROGRAM_NAME }}/builddir/meson-logs/meson-log.txt
+          path: ${{ env.PROJ_NAME }}/builddir/meson-logs/meson-log.txt
 
-      - name: Create source zip file on Linux
+      - name: Create source archive
         if: ${{ matrix.release == 'yes' && runner.os == 'Linux' }}
-        working-directory: ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
         run: |
-          zip -r ${{ env.PROGRAM_NAME }}_source.zip meson.build src/
+          zip -r ${{ env.PROJ_NAME }}_source.zip meson.build src/
           ls -lha *.zip
 
-      - name: Create zip file on MacOS and Linux
+      - name: Create distribution archive (Linux, macOS)
         if: ${{ matrix.release == 'yes' && runner.os != 'Windows' }}
-        working-directory: ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
         run: |
-          zip -r -j ${ostag}.zip bin/
+          zip -r -j ${{ steps.ostag.outputs.ostag }}.zip bin/
           ls -lha *.zip
 
-      - name: Create zip file on Windows
+      - name: Create distribution archive (Windows)
         if: ${{ matrix.release == 'yes' && runner.os == 'Windows' }}
-        working-directory: ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
         run: |
-          $ZipFileName = "$env:ostag.zip"
+          $ZipFileName = "${{ steps.ostag.outputs.ostag }}.zip"
           Compress-Archive -Path "bin\*" -DestinationPath $ZipFileName
           ls *.zip
 
@@ -143,46 +144,50 @@ jobs:
         if: matrix.release == 'yes'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.DIST }}-${{ matrix.os }}
-          path: ${{ env.PROGRAM_NAME }}/*.zip
+          name: ${{ env.PROJ_NAME }}_${{ matrix.os }}
+          path: ${{ env.PROJ_NAME }}/*.zip
 
   release:
     name: Make release
     needs: build
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
-          path: ${{ env.PROGRAM_NAME }}
+          path: ${{ env.PROJ_NAME }}
 
-      - name: Extract version number from the main meson.build file
-        working-directory: ${{ env.PROGRAM_NAME }}
+      - name: Get version
+        working-directory: ${{ env.PROJ_NAME }}
+        id: version
         run: |
-          echo "PROGRAM_VERSION=$(grep -oE "([0-9]{1,}\.)+[0-9]{1,}" meson.build | head -n 1)" >> $GITHUB_ENV
+          ver=$(grep "^  version:" meson.build | head -1 | sed "s/  version: '\(.*\)',/\1/g")
+          echo "version=$ver" >> $GITHUB_OUTPUT
 
-      - name: Download distribution
+      - name: Download distributions
         uses: actions/download-artifact@v5
         with:
-          pattern: ${{ env.DIST }}*
+          pattern: ${{ env.PROJ_NAME }}*
           merge-multiple: true
-          path: ${{ env.DIST }}
+          path: ${{ env.PROJ_NAME }}
 
       - name: List distribution files
-        run: ls -l ${{ env.DIST }}
+        run: ls -l ${{ env.PROJ_NAME }}
 
         # create new release if manual trigger
       - name: Create release
         if: github.event_name == 'workflow_dispatch'
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ env.PROGRAM_VERSION }}
-          name: "${{ env.PROGRAM_NAME }} executables"
-          artifacts: "${{ env.DIST }}/*"
+          tag: v${{ steps.version.outputs.version }}
+          name: ${{ env.PROJ_NAME }} ${{ steps.version.outputs.version }}
+          body: ${{ env.LONG_NAME }} version ${{ steps.version.outputs.version }}
+          artifacts: "${{ env.PROJ_NAME }}/*"
           draft: false
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
