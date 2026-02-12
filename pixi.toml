@@ -2,7 +2,7 @@
 name = "mfusg"
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "linux-aarch64", "osx-arm64", "osx-64"]
-version = "1.4.01"
+version = "1.5.01"
 
 [dependencies]
 filelock = "*"
