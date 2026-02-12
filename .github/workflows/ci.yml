@@ -150,11 +150,12 @@ jobs:
   release:
     name: Make release
     needs: build
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -162,12 +163,13 @@ jobs:
           path: ${{ env.PROJ_NAME }}
 
       - name: Get version
+        working-directory: ${{ env.PROJ_NAME }}
         id: version
         run: |
           ver=$(grep "^  version:" meson.build | head -1 | sed "s/  version: '\(.*\)',/\1/g")
           echo "version=$ver" >> $GITHUB_OUTPUT
 
-      - name: Download distribution
+      - name: Download distributions
         uses: actions/download-artifact@v5
         with:
           pattern: ${{ env.PROJ_NAME }}*
