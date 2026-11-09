@@ -7,6 +7,7 @@ program tester
   use, intrinsic :: iso_fortran_env, only: error_unit
   use testdrive, only: run_testsuite, new_testsuite, testsuite_type, &
                        select_suite, run_selected, get_argument
+  use TestCbck12, only: collect_cbck12
   use TestSmooth, only: collect_smooth
   implicit none
   integer :: stat, is
@@ -16,6 +17,7 @@ program tester
 
   stat = 0
   testsuites = [ &
+               new_testsuite("Cbck12", collect_cbck12), &
                new_testsuite("Smooth", collect_smooth) &
                ]
 
