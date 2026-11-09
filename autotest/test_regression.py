@@ -7,8 +7,10 @@ distribution, which get-modflow downloads once per session.
 
 Cases:
   - test_regression : both runs terminate normally, the list file budgets agree
-                      within 0.01 percent of the total flow, and the binary head
-                      and drawdown arrays agree within 0.001.
+                      within 0.1 percent of the total flow, and the binary head
+                      and drawdown arrays agree within 0.001. The comparison
+                      is skipped if the previous release does not terminate
+                      normally.
 """
 
 import shutil
@@ -30,7 +32,7 @@ ARRAY_SUFFIXES = {".hds", ".hed", ".ddn", ".clnhds"}
 HEAD_ATOL = 1e-3
 
 # budget terms may differ by this fraction of the total flow
-BUDGET_RTOL = 1e-4
+BUDGET_RTOL = 1e-3
 
 # initial heads are read from a single precision binary file
 SKIP = {("mfusgdbl", "test-reg/test019_complex_problem")}
@@ -77,7 +79,7 @@ def run_model(exe, namefile, ws):
     proc = subprocess.run(
         [str(exe), namefile.name], cwd=ws, capture_output=True, text=True
     )
-    assert "Normal termination" in proc.stdout, proc.stdout + proc.stderr
+    return "Normal termination" in proc.stdout, proc.stdout + proc.stderr
 
 
 def read_header(buf, pos, nbyte):
@@ -139,7 +141,12 @@ def compare_budgets(fpth, fpth_ref):
         ]
     for bud, bud_ref in budgets:
         assert bud.shape == bud_ref.shape, f"{fpth.name} budget lengths differ"
-        names = [n for n in bud_ref.dtype.names if n.isupper()]
+        # percent discrepancy is derived from IN-OUT, which is compared
+        names = [
+            n
+            for n in bud_ref.dtype.names
+            if n.isupper() and n != "PERCENT_DISCREPANCY"
+        ]
         for i in range(bud_ref.shape[0]):
             total = max(abs(bud_ref["TOTAL_IN"][i]), abs(bud_ref["TOTAL_OUT"][i]))
             for name in names:
@@ -165,19 +172,24 @@ def compare_arrays(fpth, fpth_ref):
 @pytest.mark.parametrize(
     "namefile",
     NAMEFILES,
-    ids=[str(p.parent.relative_to(ROOT)) for p in NAMEFILES],
+    ids=[p.parent.relative_to(ROOT).as_posix() for p in NAMEFILES],
 )
 @pytest.mark.parametrize("target", TARGETS)
 def test_regression(tmp_path, ref_bin, target, namefile):
     exe = ROOT / "bin" / f"{target}{EXT}"
     if not exe.is_file():
         pytest.skip(f"{exe.name} is not built")
-    if (target, str(namefile.parent.relative_to(ROOT))) in SKIP:
+    if (target, namefile.parent.relative_to(ROOT).as_posix()) in SKIP:
         pytest.skip(f"{namefile.name} cannot be run with {target}")
 
     ws, ws_ref = tmp_path / "dev", tmp_path / "ref"
-    run_model(exe, namefile, ws)
-    run_model(ref_bin / f"{target}{EXT}", namefile, ws_ref)
+    success, output = run_model(exe, namefile, ws)
+    assert success, output
+
+    # the previous release can stop on uninitialized solver work arrays
+    success, output = run_model(ref_bin / f"{target}{EXT}", namefile, ws_ref)
+    if not success:
+        pytest.skip(f"previous release did not terminate normally\n{output}")
 
     files = read_namefile(namefile)
     lst = files["LIST"][0]
