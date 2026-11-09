@@ -8,6 +8,7 @@ program tester
   use testdrive, only: run_testsuite, new_testsuite, testsuite_type, &
                        select_suite, run_selected, get_argument
   use TestCbck12, only: collect_cbck12
+  use TestGncn, only: collect_gncn
   use TestSmooth, only: collect_smooth
   implicit none
   integer :: stat, is
@@ -18,6 +19,7 @@ program tester
   stat = 0
   testsuites = [ &
                new_testsuite("Cbck12", collect_cbck12), &
+               new_testsuite("Gncn", collect_gncn), &
                new_testsuite("Smooth", collect_smooth) &
                ]
 
