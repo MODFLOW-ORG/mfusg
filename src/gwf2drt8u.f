@@ -374,13 +374,11 @@ C5------LOOP THROUGH EACH DRAIN-RETURN CELL, CALCULATING FLOW.
 C
 C5A-----GET NODE NUMBER OF CELL CONTAINING DRAIN.
         ND=DRTF(1,L)
-        IL=DRTF(2,L)
         Q=ZERO
         INR=0
         IF (IDRTFL.GT.0) THEN
           QIN=ZERO
           INR = DRTF(6,L)
-          ILR = DRTF(7,L)
           IF (IBOUND(INR) .LE. 0) INR = 0
         END IF
 C
@@ -415,9 +413,18 @@ C5E-----PRINT THE INDIVIDUAL RATES IF REQUESTED(IDRTCB<0).
         IF (IBD.LT.0) THEN
           IF (IBDLBL.EQ.0) WRITE(IOUT,61) TEXT,KPER,KSTP
    61     FORMAT(1X,/1X,A,'   PERIOD ',I4,'   STEP ',I3)
-          WRITE(IOUT,62) L,IL,IR,IC,Q
-   62     FORMAT(1X,'DRAIN ',I6,'   LAYER ',I3,'   ROW ',I5,
-     &       '   COL ',I5,'   RATE ',1PG15.6)
+          IF (IUNSTR.EQ.0 .AND. ND.LE.NODES) THEN
+            IL = (ND-1) / (NCOL*NROW) + 1
+            IJ = ND - (IL-1)*NCOL*NROW
+            IR = (IJ-1)/NCOL + 1
+            IC = IJ - (IR-1)*NCOL
+            WRITE(IOUT,62) L,IL,IR,IC,Q
+   62       FORMAT(1X,'DRAIN ',I6,'   LAYER ',I3,'   ROW ',I5,
+     &         '   COL ',I5,'   RATE ',1PG15.6)
+          ELSE
+            WRITE(IOUT,63) L,ND,Q
+   63       FORMAT(1X,'DRAIN ',I6,'    NODE ',I8,'   RATE ',1PG15.6)
+          ENDIF
           IF (INR.NE.0) THEN
             WRITE(IOUT,550) L,INR,QIN
   550       FORMAT(1X,'DRAIN ',I6,
