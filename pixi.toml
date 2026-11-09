@@ -38,3 +38,6 @@ platforms = ["linux-64", "osx-arm64"]
 gfortran = "13.*"
 pkg-config = "*"
 test-drive = "*"
+# gfortran 13 cannot read the module files of test-drive builds made with
+# gfortran 15, so keep the runtime, and with it test-drive, below 15
+libgfortran5 = "<15"
