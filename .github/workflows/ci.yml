@@ -18,7 +18,6 @@ jobs:
         include:
           - {os: ubuntu-22.04, compiler: intel, version: "2025.0", shell: bash}
           - {os: macos-latest, compiler: gcc, version: 13, shell: bash}
-          - {os: macos-15-intel, compiler: gcc, version: 13, shell: bash}
           - {os: windows-2022, compiler: intel, version: "2025.0", shell: pwsh}
     defaults:
       run:
