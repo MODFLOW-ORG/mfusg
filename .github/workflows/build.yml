@@ -26,7 +26,7 @@ jobs:
         include:
           # test latest gcc
           - {os: ubuntu-latest, compiler: gcc, version: 13, shell: bash, release: no}
-          - {os: macos-latest, compiler: gcc, version: 13, shell: bash, release: yes}
+          - {os: macos-15, compiler: gcc, version: 13, shell: bash, release: yes, xcode-version: '16.4'}
           - {os: windows-latest, compiler: gcc, version: 13, shell: pwsh, release: no}
           # test intel-classic
           - {os: ubuntu-22.04, compiler: intel-classic, version: 2021.7, shell: bash, release: no}
@@ -64,6 +64,20 @@ jobs:
         run: |
           echo "ostag=$(pixi run get-ostag)" >> $GITHUB_OUTPUT
 
+      - name: Set xcode version (macOS)
+        if: runner.os == 'macOS'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode-version }}
+
+      - name: Show toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          xcode-select -p
+          xcrun --show-sdk-version
+          ld -v 2>&1 | head -2
+          gfortran --version | head -1
+
       # static link gfortran libs
       - name: Hide dylibs (macOS)
         if: runner.os == 'macOS'
@@ -77,11 +91,11 @@ jobs:
           mv $libpath/libquadmath.0.dylib $libpath/libquadmath.0.dylib.bak
           mv $libpath/libstdc++.6.dylib $libpath/libstdc++.6.dylib.bak
 
-      # static link libgcc
+      # use classic xcode linker, static link libgcc
       - name: Set LDFLAGS (macOS)
         if: runner.os == 'macOS'
         run: |
-          ldflags="$LDFLAGS -static-libgcc"
+          ldflags="$LDFLAGS -Wl,-ld_classic -static-libgcc"
           echo "LDFLAGS=$ldflags" >> $GITHUB_ENV
 
       - name: Build single precision
