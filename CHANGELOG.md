@@ -4,14 +4,15 @@ Features, fixes, and performance changes in each MODFLOW-USG release.
 
 ## Version 1.5.1 (2026-11-09)
 
-### Fixes
+Changes since version 1.5.0.
 
-* Initialize variables read before they are set (#69) ([0069671](https://github.com/MODFLOW-ORG/mfusg/commit/006967150218a2c007d6487ca6ea2302936e4b91))
-* drt: Compute layer, row, and column for printed budget rates (#71) ([89b30fb](https://github.com/MODFLOW-ORG/mfusg/commit/89b30fb75dd084d4f9f0b819af9642f121363f3f))
-* openspec: Use unformatted stream access so gfortran builds can write binary files (#65) ([2c69bb1](https://github.com/MODFLOW-ORG/mfusg/commit/2c69bb1a8333f9553ca605f6fc64e3ff943fd942))
+### Features
 
-## Version 1.5.01 (2026-02-12)
+* build: Build with meson and pixi, and build and release executables for Linux, macOS (Apple silicon), and Windows with GitHub Actions (#54, #57) ([6263424](https://github.com/MODFLOW-ORG/mfusg/commit/6263424), [694e07d](https://github.com/MODFLOW-ORG/mfusg/commit/694e07d))
 
 ### Fixes
 
-* ets: Add NODES to GLOBAL import in GWF2ETS8U1RP ([dac79ee](https://github.com/MODFLOW-ORG/mfusg/commit/dac79eeb00cacebf6b3bcf56197688b41ea5d221))
+* ets: Add NODES to GLOBAL import in GWF2ETS8U1RP (#47) ([b48bac7](https://github.com/MODFLOW-ORG/mfusg/commit/b48bac7))
+* openspec: Use unformatted stream access so gfortran builds can write binary files (#65) ([2c69bb1](https://github.com/MODFLOW-ORG/mfusg/commit/2c69bb1))
+* Initialize variables read before they are set in WEL, LAK, and SMS (#69) ([0069671](https://github.com/MODFLOW-ORG/mfusg/commit/0069671))
+* drt: Compute layer, row, and column for printed budget rates (#71) ([89b30fb](https://github.com/MODFLOW-ORG/mfusg/commit/89b30fb))
