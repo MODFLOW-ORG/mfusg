@@ -172,3 +172,7 @@ ref/*
 *.hed
 *.bhd
 *.chk
+
+# meson and pixi
+builddir*/
+.pixi/

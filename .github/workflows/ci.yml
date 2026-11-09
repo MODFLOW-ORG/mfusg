@@ -1,74 +1,69 @@
-name: mfusg CI/CD
+name: mfusg release
 on:
-  # run at 6 AM UTC every day
-  schedule:
-    - cron: '0 6 * * *'
-  push:
-  pull_request:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 env:
   PIXI_BETA_WARNING_OFF: true
-  PROJ_NAME: mfusg
-  LONG_NAME: MODFLOW USG
+  DIST: dist-path
+  PROGRAM_NAME: mfusg
 jobs:
   build:
     name: ${{ matrix.os }} ${{ matrix.compiler }} ${{ matrix.version }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-          # test latest gcc
-          - {os: ubuntu-latest, compiler: gcc, version: 13, shell: bash, release: no}
-          - {os: macos-14, compiler: gcc, version: 13, shell: bash, release: yes}
-          - {os: macos-15-intel, compiler: gcc, version: 13, shell: bash, release: yes}
-          - {os: windows-latest, compiler: gcc, version: 13, shell: pwsh, release: no}
-          # test intel-classic
-          - {os: ubuntu-22.04, compiler: intel-classic, version: 2021.7, shell: bash, release: no}
-          # test previous gcc
-          - {os: ubuntu-latest, compiler: gcc, version: 12, shell: bash, release: no}
-          - {os: ubuntu-latest, compiler: gcc, version: 11, shell: bash, release: no}
-          # test ifx
-          - {os: ubuntu-22.04, compiler: intel, version: "2025.0", shell: bash, release: yes}
-          - {os: windows-2022, compiler: intel, version: "2025.0", shell: pwsh, release: yes}
+          - {os: ubuntu-22.04, compiler: intel, version: "2025.0", shell: bash}
+          - {os: macos-15, compiler: gcc, version: 13, shell: bash, xcode-version: '16.4'}
+          - {os: windows-2022, compiler: intel, version: "2025.0", shell: pwsh}
     defaults:
       run:
         shell: ${{ matrix.shell }}
     steps:
-      - name: Checkout ${{ env.PROJ_NAME }}
-        uses: actions/checkout@v5
+      - name: Checkout ${{ env.PROGRAM_NAME }}
+        uses: actions/checkout@v7
         with:
-          path: ${{ env.PROJ_NAME }}
+          path: ${{ env.PROGRAM_NAME }}
 
-      - name: Setup ${{ matrix.compiler }} ${{ matrix.version }}
+      - name: Setup ${{ matrix.compiler }} ${{ matrix.version }} on ${{ matrix.os }}
         uses: fortran-lang/setup-fortran@v1
         with:
           compiler: ${{ matrix.compiler}}
           version: ${{ matrix.version }}
 
       - name: Setup pixi
-        uses: prefix-dev/setup-pixi@v0.9.2
+        uses: prefix-dev/setup-pixi@v0.11.3
         with:
           pixi-version: v0.82.1
-          manifest-path: "${{ env.PROJ_NAME }}/pixi.toml"
+          manifest-path: "${{ env.PROGRAM_NAME }}/pixi.toml"
 
-      - name: Get ostag
+      - name: Set ostag
         shell: bash
-        working-directory: ${{ env.PROJ_NAME }}
-        id: ostag
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
-          echo "ostag=$(pixi run get-ostag)" >> $GITHUB_OUTPUT
+          echo "ostag=$(pixi run get-ostag)" >> $GITHUB_ENV
+
+      - name: Set xcode version (macOS)
+        if: runner.os == 'macOS'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode-version }}
+
+      - name: Show toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          xcode-select -p
+          xcrun --show-sdk-version
+          ld -v 2>&1 | head -2
+          gfortran --version | head -1
 
       # static link gfortran libs
       - name: Hide dylibs (macOS)
         if: runner.os == 'macOS'
-        working-directory: ${{ env.PROJ_NAME }}
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
           version="${{ matrix.version }}"
           brew_prefix="$(brew --prefix)"
@@ -78,74 +73,77 @@ jobs:
           mv $libpath/libquadmath.0.dylib $libpath/libquadmath.0.dylib.bak
           mv $libpath/libstdc++.6.dylib $libpath/libstdc++.6.dylib.bak
 
-      # static link libgcc
+      # use classic xcode linker, static link libgcc
       - name: Set LDFLAGS (macOS)
         if: runner.os == 'macOS'
         run: |
-          ldflags="$LDFLAGS -static-libgcc"
+          ldflags="$LDFLAGS -Wl,-ld_classic -static-libgcc"
           echo "LDFLAGS=$ldflags" >> $GITHUB_ENV
 
-      - name: Build single precision
-        working-directory: ${{ env.PROJ_NAME }}
+      - name: Build single precision version of ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
           pixi run setup builddir
           pixi run build builddir
 
-      - name: Build double precision
-        working-directory: ${{ env.PROJ_NAME }}
+      - name: Build double precision version of ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
           pixi run setup builddir-dble -Ddouble=true
           pixi run build builddir-dble
 
-      - name: Check arch/deps (macOS)
-        working-directory: ${{ env.PROJ_NAME }}/bin
+      - name: Check architecture (macOS)
+        working-directory: ${{ env.PROGRAM_NAME }}/bin
         if: runner.os == 'macOS'
         run: |
           otool -L mfusg
           otool -L mfusgdbl
+          if otool -L mfusg mfusgdbl | grep -E 'libgfortran|libgcc_s|libquadmath'; then
+            echo "error: binaries dynamically link gcc/gfortran runtime libraries"
+            exit 1
+          fi
           lipo -info mfusg
           lipo -info mfusgdbl
 
       - name: Show build log
         if: failure()
-        working-directory: ${{ env.PROJ_NAME }}
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: cat builddir/meson-logs/meson-log.txt
 
       - name: Upload build log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.compiler}}-${{ matrix.version }}-meson-log.txt
-          path: ${{ env.PROJ_NAME }}/builddir/meson-logs/meson-log.txt
+          path: ${{ env.PROGRAM_NAME }}/builddir/meson-logs/meson-log.txt
 
-      - name: Create source archive
-        if: ${{ matrix.release == 'yes' && runner.os == 'Linux' }}
-        working-directory: ${{ env.PROJ_NAME }}
+      - name: Create source zip file on Linux
+        if: runner.os == 'Linux'
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
-          zip -r ${{ env.PROJ_NAME }}_source.zip meson.build src/
+          zip -r ${{ env.PROGRAM_NAME }}_source.zip meson.build meson.options src/
           ls -lha *.zip
 
-      - name: Create distribution archive (Linux, macOS)
-        if: ${{ matrix.release == 'yes' && runner.os != 'Windows' }}
-        working-directory: ${{ env.PROJ_NAME }}
+      - name: Create zip file on MacOS and Linux
+        if: runner.os != 'Windows'
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
-          zip -r -j "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip" bin/
+          zip -r -j ${ostag}.zip bin/
           ls -lha *.zip
 
-      - name: Create distribution archive (Windows)
-        if: ${{ matrix.release == 'yes' && runner.os == 'Windows' }}
-        working-directory: ${{ env.PROJ_NAME }}
+      - name: Create zip file on Windows
+        if: runner.os == 'Windows'
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
-          $ZipFileName = "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip"
+          $ZipFileName = "$env:ostag.zip"
           Compress-Archive -Path "bin\*" -DestinationPath $ZipFileName
           ls *.zip
 
       - name: Upload distribution archive
-        if: matrix.release == 'yes'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.PROJ_NAME }}_${{ matrix.os }}
-          path: ${{ env.PROJ_NAME }}/*.zip
+          name: ${{ env.DIST }}-${{ matrix.os }}
+          path: ${{ env.PROGRAM_NAME }}/*.zip
 
   release:
     name: Make release
@@ -158,36 +156,31 @@ jobs:
         shell: bash
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
-          path: ${{ env.PROJ_NAME }}
+          path: ${{ env.PROGRAM_NAME }}
 
-      - name: Get version
-        working-directory: ${{ env.PROJ_NAME }}
-        id: version
+      - name: Extract version number from the main meson.build file
+        working-directory: ${{ env.PROGRAM_NAME }}
         run: |
-          ver=$(grep "^  version:" meson.build | head -1 | sed "s/  version: '\(.*\)',/\1/g")
-          echo "version=$ver" >> $GITHUB_OUTPUT
+          echo "PROGRAM_VERSION=$(grep -oE "([0-9]{1,}\.)+[0-9]{1,}" meson.build | head -n 1)" >> $GITHUB_ENV
 
-      - name: Download distributions
-        uses: actions/download-artifact@v5
+      - name: Download distribution
+        uses: actions/download-artifact@v8
         with:
-          pattern: ${{ env.PROJ_NAME }}*
+          pattern: ${{ env.DIST }}*
           merge-multiple: true
-          path: ${{ env.PROJ_NAME }}/dists
+          path: ${{ env.DIST }}
 
       - name: List distribution files
-        run: ls -l ${{ env.PROJ_NAME }}/dists
+        run: ls -l ${{ env.DIST }}
 
-        # create new release if manual trigger
       - name: Create release
-        if: github.event_name == 'workflow_dispatch'
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ steps.version.outputs.version }}
-          name: ${{ env.PROJ_NAME }} ${{ steps.version.outputs.version }}
-          body: ${{ env.LONG_NAME }} version ${{ steps.version.outputs.version }}
-          artifacts: "${{ env.PROJ_NAME }}/dists/*"
+          tag: v${{ env.PROGRAM_VERSION }}
+          name: "${{ env.PROGRAM_NAME }} executables"
+          artifacts: "${{ env.DIST }}/*"
           draft: false
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
