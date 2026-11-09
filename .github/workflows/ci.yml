@@ -18,6 +18,8 @@ env:
   PIXI_BETA_WARNING_OFF: true
   DIST: dist-path
   PROGRAM_NAME: mfusg
+# jobs after build need explicit conditions, because prepare or check is
+# always skipped and a skipped job skips everything that depends on it
 jobs:
   prepare:
     name: Prepare release branch
@@ -240,6 +242,7 @@ jobs:
     needs:
       - prepare
       - build
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -260,6 +263,7 @@ jobs:
     needs:
       - check
       - build
+    if: ${{ !cancelled() && needs.check.outputs.release == 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -288,6 +292,7 @@ jobs:
     needs:
       - check
       - release
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
