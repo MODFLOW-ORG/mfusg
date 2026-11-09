@@ -24,18 +24,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # test latest gcc
-          - {os: ubuntu-latest, compiler: gcc, version: 13, shell: bash, release: no}
-          - {os: macos-15, compiler: gcc, version: 13, shell: bash, release: yes, xcode-version: '16.4'}
-          - {os: windows-latest, compiler: gcc, version: 13, shell: pwsh, release: no}
-          # test intel-classic
-          - {os: ubuntu-22.04, compiler: intel-classic, version: 2021.7, shell: bash, release: no}
-          # test previous gcc
-          - {os: ubuntu-latest, compiler: gcc, version: 12, shell: bash, release: no}
-          - {os: ubuntu-latest, compiler: gcc, version: 11, shell: bash, release: no}
-          # test ifx
-          - {os: ubuntu-22.04, compiler: intel, version: "2025.0", shell: bash, release: yes}
-          - {os: windows-2022, compiler: intel, version: "2025.0", shell: pwsh, release: yes}
+          # gcc
+          - {os: ubuntu-latest, compiler: gcc, version: 13, shell: bash}
+          - {os: macos-15, compiler: gcc, version: 13, shell: bash, xcode-version: '16.4'}
+          - {os: windows-latest, compiler: gcc, version: 13, shell: pwsh}
+          # intel
+          - {os: ubuntu-22.04, compiler: intel, version: "2025.0", shell: bash}
+          - {os: windows-2022, compiler: intel, version: "2025.0", shell: pwsh}
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -56,13 +51,6 @@ jobs:
         with:
           pixi-version: v0.82.1
           manifest-path: "${{ env.PROJ_NAME }}/pixi.toml"
-
-      - name: Get ostag
-        shell: bash
-        working-directory: ${{ env.PROJ_NAME }}
-        id: ostag
-        run: |
-          echo "ostag=$(pixi run get-ostag)" >> $GITHUB_OUTPUT
 
       - name: Set xcode version (macOS)
         if: runner.os == 'macOS'
@@ -130,35 +118,6 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.compiler}}-${{ matrix.version }}-meson-log.txt
           path: ${{ env.PROJ_NAME }}/builddir/meson-logs/meson-log.txt
-
-      - name: Create source archive
-        if: ${{ matrix.release == 'yes' && runner.os == 'Linux' }}
-        working-directory: ${{ env.PROJ_NAME }}
-        run: |
-          zip -r ${{ env.PROJ_NAME }}_source.zip meson.build src/
-          ls -lha *.zip
-
-      - name: Create distribution archive (Linux, macOS)
-        if: ${{ matrix.release == 'yes' && runner.os != 'Windows' }}
-        working-directory: ${{ env.PROJ_NAME }}
-        run: |
-          zip -r -j "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip" bin/
-          ls -lha *.zip
-
-      - name: Create distribution archive (Windows)
-        if: ${{ matrix.release == 'yes' && runner.os == 'Windows' }}
-        working-directory: ${{ env.PROJ_NAME }}
-        run: |
-          $ZipFileName = "${{ env.PROJ_NAME}}_${{ steps.ostag.outputs.ostag }}.zip"
-          Compress-Archive -Path "bin\*" -DestinationPath $ZipFileName
-          ls *.zip
-
-      - name: Upload distribution archive
-        if: matrix.release == 'yes'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.PROJ_NAME }}_${{ matrix.os }}
-          path: ${{ env.PROJ_NAME }}/*.zip
 
   pixi-gcc-build:
     name: Pixi gcc-build environment testing
