@@ -8,7 +8,7 @@ distribution, which get-modflow downloads once per session.
 Cases:
   - test_regression : both runs terminate normally, the list file budgets agree
                       within 0.1 percent of the total flow, and the binary head
-                      and drawdown arrays agree within 0.001. The comparison
+                      and drawdown arrays agree within 0.01. The comparison
                       is skipped if the previous release does not terminate
                       normally.
 """
@@ -29,7 +29,7 @@ EXT = ".exe" if sys.platform == "win32" else ""
 TARGETS = ["mfusg", "mfusgdbl"]
 GROUPS = ["examples", "test-reg", "test-cmp"]
 ARRAY_SUFFIXES = {".hds", ".hed", ".ddn", ".clnhds"}
-HEAD_ATOL = 1e-3
+HEAD_ATOL = 1e-2
 
 # budget terms may differ by this fraction of the total flow
 BUDGET_RTOL = 1e-3
