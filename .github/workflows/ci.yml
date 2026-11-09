@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout ${{ env.PROGRAM_NAME }}
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Check inputs
         env:
@@ -51,7 +53,10 @@ jobs:
             exit 1
           fi
 
-      - name: Commit version to release branch
+      - name: Install git-cliff
+        run: pipx install git-cliff==2.14.2
+
+      - name: Commit version and changelog to release branch
         id: branch
         env:
           VERSION: ${{ inputs.version }}
@@ -61,7 +66,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           python3 distribution/update_version.py --version "$VERSION"
-          git commit -am "chore(release): set version to $VERSION"
+          # features, fixes, and performance changes since the last release
+          git-cliff --unreleased --tag "v$VERSION" --prepend CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -am "chore(release): set version to $VERSION and update changelog"
           git push origin "$branch"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
@@ -265,7 +273,7 @@ jobs:
           BRANCH: ${{ needs.prepare.outputs.branch }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          body="Merging this pull request publishes the v$VERSION release. The release workflow builds and tests the executables, tags the merge commit, publishes the release, and opens a pull request that sets the version on main to the next development version."
+          body="Review the v$VERSION section of CHANGELOG.md, which becomes the release notes. Merging this pull request publishes the v$VERSION release. The release workflow builds and tests the executables, tags the merge commit, publishes the release, and opens a pull request that sets the version on main to the next development version."
           gh pr create -R "${{ github.repository }}" -B main -H "$BRANCH" \
             --title "chore(release): $VERSION" --body "$body"
 
@@ -279,6 +287,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout ${{ env.PROGRAM_NAME }}
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: ${{ env.PROGRAM_NAME }}
+
       - name: Download distribution
         uses: actions/download-artifact@v8
         with:
@@ -289,6 +303,21 @@ jobs:
       - name: List distribution files
         run: ls -l ${{ env.DIST }}
 
+      # release notes are this version's section of CHANGELOG.md
+      - name: Write release notes
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          {
+            echo "MODFLOW-USG version $VERSION"
+            echo
+            awk -v ver="$VERSION" '
+              /^## Version / { found = ($3 == ver); next }
+              found { print }
+            ' ${{ env.PROGRAM_NAME }}/CHANGELOG.md
+          } > notes.md
+          cat notes.md
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -296,7 +325,7 @@ jobs:
         run: |
           gh release create "v$VERSION" ${{ env.DIST }}/* -R "${{ github.repository }}" \
             --target "${{ github.sha }}" --title "${{ env.PROGRAM_NAME }} executables" \
-            --notes "MODFLOW-USG version $VERSION" --latest
+            --notes-file notes.md --latest
 
   reset:
     name: Open next version pull request
