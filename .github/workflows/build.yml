@@ -98,6 +98,12 @@ jobs:
           pixi run setup builddir-dble -Ddouble=true
           pixi run build builddir-dble
 
+      - name: Test ${{ env.PROJ_NAME }}
+        working-directory: ${{ env.PROJ_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pixi run test
+
       - name: Check arch/deps (macOS)
         working-directory: ${{ env.PROJ_NAME }}/bin
         if: runner.os == 'macOS'
@@ -149,6 +155,11 @@ jobs:
         run: |
           pixi run -e gcc-build setup builddir-dble -Ddouble=true
           pixi run -e gcc-build build builddir-dble
+
+      - name: Test in the gcc-build environment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pixi run -e gcc-build test
 
       - name: Show build log
         if: failure()

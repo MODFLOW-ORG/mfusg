@@ -92,6 +92,12 @@ jobs:
           pixi run setup builddir-dble -Ddouble=true
           pixi run build builddir-dble
 
+      - name: Test ${{ env.PROGRAM_NAME }}
+        working-directory: ${{ env.PROGRAM_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pixi run test
+
       - name: Check architecture (macOS)
         working-directory: ${{ env.PROGRAM_NAME }}/bin
         if: runner.os == 'macOS'
