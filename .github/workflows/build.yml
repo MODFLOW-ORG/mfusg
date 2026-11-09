@@ -159,3 +159,38 @@ jobs:
         with:
           name: ${{ env.PROJ_NAME }}_${{ matrix.os }}
           path: ${{ env.PROJ_NAME }}/*.zip
+
+  pixi-gcc-build:
+    name: Pixi gcc-build environment testing
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+          - os: macos-15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout ${{ env.PROJ_NAME }}
+        uses: actions/checkout@v5
+
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@v0.11.3
+        with:
+          pixi-version: v0.82.1
+
+      - name: Build single precision in the gcc-build environment
+        run: |
+          pixi run -e gcc-build setup builddir
+          pixi run -e gcc-build build builddir
+
+      - name: Build double precision in the gcc-build environment
+        run: |
+          pixi run -e gcc-build setup builddir-dble -Ddouble=true
+          pixi run -e gcc-build build builddir-dble
+
+      - name: Show build log
+        if: failure()
+        run: cat builddir/meson-logs/meson-log.txt

@@ -19,3 +19,13 @@ build = "meson install -C"
 
 # get ostag for system
 get-ostag = { cmd = "python -c 'from modflow_devtools.ostags import get_ostag; print(get_ostag())'"}
+
+[environments]
+gcc-build = { features = ["gcc-build"] }
+
+# Features
+[feature.gcc-build]
+platforms = ["linux-64", "osx-arm64"]
+
+[feature.gcc-build.dependencies]
+gfortran = "13.*"
