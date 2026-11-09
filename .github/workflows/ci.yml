@@ -184,6 +184,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pixi run test
 
+      - name: Check dependencies (Linux)
+        working-directory: ${{ env.PROGRAM_NAME }}/bin
+        if: runner.os == 'Linux'
+        run: |
+          ldd mfusg
+          ldd mfusgdbl
+          if ldd mfusg mfusgdbl | grep -E 'libifcore|libimf|libsvml|libintlc|libirng'; then
+            echo "error: binaries dynamically link Intel runtime libraries"
+            exit 1
+          fi
+
       - name: Check architecture (macOS)
         working-directory: ${{ env.PROGRAM_NAME }}/bin
         if: runner.os == 'macOS'
