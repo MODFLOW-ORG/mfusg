@@ -2334,6 +2334,7 @@ C     ------------------------------------------------------------------
 C
       ISS = ISSFLG(KPER)
       CLOSEZERO = 1.0D-09
+      DLSTG = 0.00001D0
       SURFDPTH = DBLE(SURFDEPTH)
       TOTIMREAL = TOTIM
       IUNITGWT = 0

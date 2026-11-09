@@ -735,6 +735,7 @@ C---------GWF MAXIMUM HEAD CHANGE
         NB=1
         ICNVG=0
         BIGCHG=0.0
+        BIGCHL=0.0
         ABIGCH=0.0
         DO N = 1, NODES
           IF (IBOUND(N).EQ.0) CYCLE
