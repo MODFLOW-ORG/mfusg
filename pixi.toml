@@ -22,6 +22,7 @@ build = "meson install -C"
 
 # tests
 test = { cmd = "pytest -v -n auto", cwd = "autotest" }
+unittest = "meson test --verbose --no-rebuild -C"
 
 # get ostag for system
 get-ostag = { cmd = "python -c 'from modflow_devtools.ostags import get_ostag; print(get_ostag())'"}
@@ -35,3 +36,5 @@ platforms = ["linux-64", "osx-arm64"]
 
 [feature.gcc-build.dependencies]
 gfortran = "13.*"
+pkg-config = "*"
+test-drive = "*"

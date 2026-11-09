@@ -136,3 +136,4 @@ else
 endif
 message('Executable name: ' + buildname)
 subdir('src')
+subdir('unittest')
