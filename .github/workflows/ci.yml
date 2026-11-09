@@ -1,16 +1,99 @@
 name: mfusg release
 on:
+  # start a release from main with the version to release
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.5.1'
+        required: true
+        type: string
+  # publish the release when the release pull request is merged
+  push:
+    branches:
+      - main
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 env:
   PIXI_BETA_WARNING_OFF: true
   DIST: dist-path
   PROGRAM_NAME: mfusg
 jobs:
+  prepare:
+    name: Prepare release branch
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      branch: ${{ steps.branch.outputs.branch }}
+      version: ${{ inputs.version }}
+    steps:
+      - name: Checkout ${{ env.PROGRAM_NAME }}
+        uses: actions/checkout@v7
+
+      - name: Check inputs
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${{ github.ref_name }}" != "main" ]]; then
+            echo "::error::Start a release from main, not ${{ github.ref_name }}."
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version $VERSION is not major.minor.patch."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::Tag v$VERSION already exists."
+            exit 1
+          fi
+
+      - name: Commit version to release branch
+        id: branch
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          branch="release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          python3 distribution/update_version.py --version "$VERSION"
+          git commit -am "chore(release): set version to $VERSION"
+          git push origin "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+  check:
+    name: Check for release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout ${{ env.PROGRAM_NAME }}
+        uses: actions/checkout@v7
+
+      # release only when main holds a release version without a tag
+      - name: Check version
+        id: check
+        run: |
+          version=$(python3 distribution/update_version.py --get)
+          release=false
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+             ! git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            release=true
+          fi
+          echo "version $version, release $release"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
   build:
     name: ${{ matrix.os }} ${{ matrix.compiler }} ${{ matrix.version }}
+    needs:
+      - prepare
+      - check
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.check.outputs.release == 'true') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -26,6 +109,7 @@ jobs:
       - name: Checkout ${{ env.PROGRAM_NAME }}
         uses: actions/checkout@v7
         with:
+          ref: ${{ needs.prepare.outputs.branch || github.sha }}
           path: ${{ env.PROGRAM_NAME }}
 
       - name: Setup ${{ matrix.compiler }} ${{ matrix.version }} on ${{ matrix.os }}
@@ -151,26 +235,35 @@ jobs:
           name: ${{ env.DIST }}-${{ matrix.os }}
           path: ${{ env.PROGRAM_NAME }}/*.zip
 
+  pr:
+    name: Open release pull request
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Create pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.prepare.outputs.branch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          body="Merging this pull request publishes the v$VERSION release. The release workflow builds and tests the executables, tags the merge commit, publishes the release, and opens a pull request that sets the version on main to the next development version."
+          gh pr create -R "${{ github.repository }}" -B main -H "$BRANCH" \
+            --title "chore(release): $VERSION" --body "$body"
+
   release:
-    name: Make release
-    needs: build
+    name: Publish release
+    needs:
+      - check
+      - build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v7
-        with:
-          path: ${{ env.PROGRAM_NAME }}
-
-      - name: Extract version number from the main meson.build file
-        working-directory: ${{ env.PROGRAM_NAME }}
-        run: |
-          echo "PROGRAM_VERSION=$(grep -oE "([0-9]{1,}\.)+[0-9]{1,}" meson.build | head -n 1)" >> $GITHUB_ENV
-
       - name: Download distribution
         uses: actions/download-artifact@v8
         with:
@@ -182,11 +275,42 @@ jobs:
         run: ls -l ${{ env.DIST }}
 
       - name: Create release
-        uses: ncipollo/release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          gh release create "v$VERSION" ${{ env.DIST }}/* -R "${{ github.repository }}" \
+            --target "${{ github.sha }}" --title "${{ env.PROGRAM_NAME }} executables" \
+            --notes "MODFLOW-USG version $VERSION" --latest
+
+  reset:
+    name: Open next version pull request
+    needs:
+      - check
+      - release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout ${{ env.PROGRAM_NAME }}
+        uses: actions/checkout@v7
         with:
-          tag: v${{ env.PROGRAM_VERSION }}
-          name: "${{ env.PROGRAM_NAME }} executables"
-          artifacts: "${{ env.DIST }}/*"
-          draft: false
-          allowUpdates: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.sha }}
+
+      - name: Commit next version and create pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          next=$(python3 distribution/update_version.py --next)
+          branch="release/v$next"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          python3 distribution/update_version.py --version "$next"
+          git commit -am "chore(release): set version to $next"
+          git push origin "$branch"
+          gh pr create -R "${{ github.repository }}" -B main -H "$branch" \
+            --title "chore(release): set version to $next" \
+            --body "Set the version on main to $next after the v$VERSION release."
