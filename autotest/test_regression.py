@@ -32,7 +32,7 @@ TARGETS = ["mfusg", "mfusgdbl"]
 GROUPS = ["examples", "test-reg", "test-cmp"]
 ARRAY_SUFFIXES = {".hds", ".hed", ".ddn", ".clnhds"}
 HEAD_ATOL = 1e-2
-REF_VERSION = "1.5.1"
+REF_VERSION = "1.5.2"
 REF_URL = "https://github.com/MODFLOW-ORG/mfusg/releases/download/v{}/{}.zip"
 
 # budget terms may differ by this fraction of the total flow
