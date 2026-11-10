@@ -2,27 +2,29 @@
 Regression tests of the models in examples/, test-reg/, and test-cmp/.
 
 Each model is run with each available executable in bin/ and with the same
-precision of the previous release from the MODFLOW-ORG/executables
-distribution, which get-modflow downloads once per session.
+precision of the reference release, which is downloaded from the mfusg GitHub
+releases once per session.
 
 Cases:
   - test_regression : both runs terminate normally, the list file budgets agree
                       within 0.1 percent of the total flow, and the binary head
-                      and drawdown arrays agree within 0.01. The comparison
-                      is skipped if the previous release does not terminate
-                      normally.
+                      and drawdown arrays agree within 0.01.
 """
 
 import shutil
+import stat
 import subprocess
 import sys
+import urllib.request
 import warnings
+import zipfile
 from pathlib import Path
 
 import flopy
 import numpy as np
 import pytest
 from filelock import FileLock
+from modflow_devtools.ostags import get_ostag
 
 ROOT = Path(__file__).resolve().parents[1]
 EXT = ".exe" if sys.platform == "win32" else ""
@@ -30,6 +32,8 @@ TARGETS = ["mfusg", "mfusgdbl"]
 GROUPS = ["examples", "test-reg", "test-cmp"]
 ARRAY_SUFFIXES = {".hds", ".hed", ".ddn", ".clnhds"}
 HEAD_ATOL = 1e-2
+REF_VERSION = "1.5.2"
+REF_URL = "https://github.com/MODFLOW-ORG/mfusg/releases/download/v{}/{}.zip"
 
 # budget terms may differ by this fraction of the total flow
 BUDGET_RTOL = 1e-3
@@ -59,7 +63,16 @@ def ref_bin(tmp_path_factory, worker_id):
     with FileLock(str(root / "ref_bin.lock")):
         if not (bindir / f"mfusg{EXT}").is_file():
             bindir.mkdir(exist_ok=True)
-            flopy.utils.get_modflow(str(bindir), repo="executables", subset="mfusg")
+            url = REF_URL.format(REF_VERSION, get_ostag())
+            fpth = root / "ref_bin.zip"
+            try:
+                urllib.request.urlretrieve(url, fpth)
+            except OSError as err:
+                pytest.skip(f"cannot download {url}: {err}")
+            with zipfile.ZipFile(fpth) as zf:
+                zf.extractall(bindir)
+            for exe in bindir.iterdir():
+                exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
     return bindir
 
 
@@ -186,10 +199,8 @@ def test_regression(tmp_path, ref_bin, target, namefile):
     success, output = run_model(exe, namefile, ws)
     assert success, output
 
-    # the previous release can stop on uninitialized solver work arrays
     success, output = run_model(ref_bin / f"{target}{EXT}", namefile, ws_ref)
-    if not success:
-        pytest.skip(f"previous release did not terminate normally\n{output}")
+    assert success, output
 
     files = read_namefile(namefile)
     lst = files["LIST"][0]
