@@ -27,7 +27,6 @@ mfusg_sources = files(
  'gwf2sub7u1.f',
  'gwf2wel7u1.f',
  'lak_gag_sfr_modules.f',
- 'mfusg.f',
  'parutl7.f',
  'pcgu7.f',
  'sparse.f',
@@ -36,8 +35,13 @@ mfusg_sources = files(
  'xmdlib_2.f',
 )
 
+# everything but the main program, so the unit tests can link it
+mfusgcore = static_library('mfusgcore',
+                           mfusg_sources,
+                           dependencies: extra_deps)
+
 mfusg = executable(buildname,
-                    mfusg_sources,
+                    'mfusg.f',
+                    link_with: mfusgcore,
                     dependencies: extra_deps,
-                    link_language : 'fortran',
                     install: true)

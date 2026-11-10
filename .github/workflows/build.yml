@@ -103,6 +103,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pixi run test
 
+      - name: Check dependencies (Linux)
+        working-directory: ${{ env.PROJ_NAME }}/bin
+        if: runner.os == 'Linux'
+        run: |
+          ldd mfusg
+          ldd mfusgdbl
+          if ldd mfusg mfusgdbl | grep -E 'libifcore|libimf|libsvml|libintlc|libirng'; then
+            echo "error: binaries dynamically link Intel runtime libraries"
+            exit 1
+          fi
+
       - name: Check arch/deps (macOS)
         working-directory: ${{ env.PROJ_NAME }}/bin
         if: runner.os == 'macOS'
@@ -154,6 +165,11 @@ jobs:
         run: |
           pixi run -e gcc-build setup builddir-dble -Ddouble=true
           pixi run -e gcc-build build builddir-dble
+
+      - name: Unit test in the gcc-build environment
+        run: |
+          pixi run -e gcc-build unittest builddir
+          pixi run -e gcc-build unittest builddir-dble
 
       - name: Test in the gcc-build environment
         env:

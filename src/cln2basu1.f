@@ -1898,7 +1898,7 @@ C     ******************************************************************
 C
 C        SPECIFICATIONS:
 C     ------------------------------------------------------------------
-      USE GLOBAL,       ONLY: HNEW,STRT,IBOUND,IOUT,NODES
+      USE GLOBAL,       ONLY: HNEW,DDREF,IBOUND,IOUT,NODES
       USE CLN1MODULE, ONLY: NCLNNDS,ICLNDD
       USE GWFBASMODULE, ONLY: PERTIM,TOTIM,IDDNFM,IDDNUN,LBDDSV,
      2                        CDDNFM,IOFLG
@@ -1917,7 +1917,7 @@ C
 C2------CALCULATE DRAWDOWN FOR THE NODE
       NG = N+NODES
       BUFF(N)=HNEW(NG)
-      SSTRT=STRT(NG)
+      SSTRT=DDREF(NG)
       IF(IBOUND(NG).NE.0) BUFF(N)=SSTRT-HNEW(NG)
    59 CONTINUE
 C

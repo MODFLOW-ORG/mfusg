@@ -3213,7 +3213,7 @@ C     ------------------------------------------------------------------
       USE GWFBCFMODULE,ONLY:LAYAVG,CHANI,HANI,IHANISO
       DIMENSION HK(NODES)
       DOUBLE PRECISION ANUM,RATIO,FRAC1,FRAC2,T,HY1,HY2,TH1,TH2,HYMEAN,
-     *  AVT
+     *  AVT,DENOM
 C     ------------------------------------------------------------------
 C1------GET HY OF CONNECTION FOR ISOTRIPIC MEDIUM
 C1------THIS HY IS THE X-DIRECTION COMPONENT FOR ANISOTROPIC MEDIUM
@@ -3250,7 +3250,16 @@ c        ANUM = ANUM * ACA + HYMEAN*ASA
 c .......use flux formulation to compute the anisotropy angle        
         ACA = COS(ANGLE) * COS(ANGLE)
         ASA = SIN(ANGLE) * SIN(ANGLE)
-        ANUM = 1.0 / (ACA/ANUM + ASA/HYMEAN)        
+C2C-------A ZERO COMPONENT IN A DIRECTION WITH WEIGHT GIVES ZERO
+        IF((ACA.GT.ZERO.AND.ANUM.LE.ZERO).OR.
+     1     (ASA.GT.ZERO.AND.HYMEAN.LE.ZERO)) THEN
+          ANUM = ZERO
+        ELSE
+          DENOM = ZERO
+          IF(ACA.GT.ZERO) DENOM = DENOM + ACA/ANUM
+          IF(ASA.GT.ZERO) DENOM = DENOM + ASA/HYMEAN
+          ANUM = 1.0 / DENOM
+        ENDIF
       ENDIF
 C3------FOR LAYAVG OF 2, MULTIPLY LOG MEAN K BY AVERAGE SAT THICKNESS
       IF(LAYAVG(K).EQ.2)THEN

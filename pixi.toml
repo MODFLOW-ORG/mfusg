@@ -2,7 +2,7 @@
 name = "mfusg"
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "linux-aarch64", "osx-arm64", "osx-64"]
-version = "1.5.1"
+version = "1.5.2"
 
 [dependencies]
 filelock = "*"
@@ -22,6 +22,7 @@ build = "meson install -C"
 
 # tests
 test = { cmd = "pytest -v -n auto", cwd = "autotest" }
+unittest = "meson test --verbose --no-rebuild -C"
 
 # get ostag for system
 get-ostag = { cmd = "python -c 'from modflow_devtools.ostags import get_ostag; print(get_ostag())'"}
@@ -35,3 +36,7 @@ platforms = ["linux-64", "osx-arm64"]
 
 [feature.gcc-build.dependencies]
 gfortran = "13.*"
+pkg-config = "*"
+# gfortran 13 cannot read the module files of test-drive builds made with
+# gfortran 15, so use the 0.6.1 builds made with gfortran 14
+test-drive = { version = "==0.6.1", build = "gfortran*_0" }
