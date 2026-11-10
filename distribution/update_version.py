@@ -40,8 +40,10 @@ def get_version():
 
 
 def next_version(version):
-    major, minor = version.split(".")[:2]
-    return f"{major}.{int(minor) + 1}.0.dev0"
+    # the dev number is the micro version, so 1.5.0 gives 1.6.0.dev0 and
+    # 1.5.2 gives 1.6.0.dev2
+    major, minor, micro = version.split(".")[:3]
+    return f"{major}.{int(minor) + 1}.0.dev{int(micro)}"
 
 
 def set_version(version):
