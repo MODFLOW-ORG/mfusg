@@ -1,7 +1,7 @@
 project(
   'mfusg',
   'fortran',
-  version: '1.6.0.dev0',
+  version: '1.6.0.dev2',
   license: 'CC0',
   meson_version: '>= 1.7.0',
   default_options : [
