@@ -4,6 +4,7 @@ if test_drive.found() and not fc_id.contains('intel')
   tests = [
     'Cbck12',
     'Gncn',
+    'Pcgu',
     'Smooth',
   ]
 

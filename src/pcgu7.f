@@ -5,6 +5,10 @@
         PUBLIC :: PCGU7U1AP
         PUBLIC :: PCGU7U1DA
         PUBLIC :: ILINMETH
+C         PRECONDITIONER ROUTINES, PUBLIC FOR THE UNIT TESTS
+        PUBLIC :: SPCGU_PCCRS
+        PUBLIC :: SPCGU_PCU
+        PUBLIC :: SPCGU_PCILU0
         INTEGER,SAVE,POINTER  :: ITER1C,IPC,ISCL,IORD,NITERC,NNZC,NIAC
         INTEGER,SAVE,POINTER  :: NIABCGS
         INTEGER,SAVE,POINTER  :: NIAPC,NJAPC,NNZAPC
@@ -832,8 +836,9 @@ C     + + + LOCAL DEFINITIONS + + +
         DOUBLEPRECISION :: delta
 C     + + + FUNCTIONS + + +
 C     + + + FORMATS + + +
-2000    FORMAT (/,' MATRIX IS SEVERELY NON-DIAGONALLY DOMINANT.  CHECK',
-     &          ' INPUT FILES.',/,' -- STOP EXECUTION (SPCGU_PCU)')
+2000    FORMAT (/,' MATRIX IS SEVERELY NON-DIAGONALLY DOMINANT.',
+     &          /,' REPLACING ZERO AND SIGN-CHANGING PIVOTS WITH A',
+     &          ' SMALL VALUE (SPCGU_PCU)')
 C     + + + CODE + + +
         izero = 0
         delta = 0.0D0
@@ -853,9 +858,11 @@ C           ILU0 AND MILU0
                 EXIT LUPC
               END IF
               delta = 1.5D0 * delta + 0.001
+C               USE THE LARGEST SHIFT AND SMALL PIVOTS ON THE LAST PASS
               IF ( delta.GT.0.5D0 ) THEN
                 WRITE(IOUT,2000)
-                CALL USTOP('MATRIX IS SEVERELY NON-DIAGONALLY DOMINANT')
+                delta = 0.5D0
+                izero = 2
               END IF
             END DO LUPC
 C           ADDITIONAL PRECONDITIONERS - ILUT, etc.
@@ -954,11 +961,15 @@ C     + + + LOCAL DEFINITIONS + + +
         DOUBLEPRECISION :: tl
         DOUBLEPRECISION :: rs
         DOUBLEPRECISION :: d
+        LOGICAL :: lsmall
         DOUBLEPRECISION, PARAMETER :: DZERO = 0.0D0
         DOUBLEPRECISION, PARAMETER :: DONE  = 1.0D0
+        DOUBLEPRECISION, PARAMETER :: DTINY = 1.0D-06
 C     + + + FUNCTIONS + + +
 C     + + + CODE + + +
         drelax = DBLE( RELAX )
+C         IZERO OF 2 REPLACES BAD PIVOTS INSTEAD OF RETURNING
+        lsmall = IZERO.EQ.2
         IZERO    = 0
         DO n = 1, NIAC
           IWC(n)  = 0
@@ -998,13 +1009,13 @@ C           DIAGONAL - CALCULATE INVERSE OF DIAGONAL FOR SOLUTION
           tl  = ( DONE + DELTA ) * d - ( drelax * rs )
 C-----------ENSURE THAT THE SIGN OF THE DIAGONAL HAS NOT CHANGED AND IS NOT ZERO
           sd1 = SIGN(d,tl)
-          IF ( sd1.NE.d ) THEN
-            IZERO = 1
-            EXIT MAIN
-          END IF
-          IF ( ABS(tl).EQ.DZERO ) THEN
-            IZERO = 1
-            EXIT MAIN
+          IF ( sd1.NE.d .OR. ABS(tl).EQ.DZERO ) THEN
+            IF ( lsmall ) THEN
+              tl = SIGN(DTINY,d)
+            ELSE
+              IZERO = 1
+              EXIT MAIN
+            END IF
           END IF
           APC(n) = DONE / tl
 C           RESET POINTER FOR IW TO ZERO
