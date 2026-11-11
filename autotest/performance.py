@@ -3,19 +3,23 @@ Performance tests of the PCGU solver against the reference release.
 
 Each case builds a 3-layer, 200 by 200 model with FloPy, runs it with
 bin/mfusg and the reference release three times each, and compares the
-fastest runs. Run with `pixi run perf`; the file is not collected by
-`pixi run test` because timings need a quiet machine.
+fastest runs. Roundoff differences can change the number of solver
+iterations on these nonlinear problems, so the cases compare the time per
+inner iteration and report the total times and iteration counts. Run with
+`pixi run perf`; the file is not collected by `pixi run test` because
+timings need a quiet machine.
 
 Cases:
   - bcgs_milu     : BiCGSTAB with MILU0 and a convertible top layer that dries,
-                    no more than 10 percent slower than the reference.
+                    no more than 10 percent slower per iteration.
   - cg_ilu_rcm    : CG with ILU0, symmetric scaling, and RCM ordering, no more
-                    than 10 percent slower than the reference.
+                    than 10 percent slower per iteration.
   - bcgs_inactive : half of each layer inactive, solved with and without the
-                    active node option, which must not be slower than the
-                    reference.
+                    active node option, no more than 10 percent slower per
+                    iteration.
 """
 
+import re
 import subprocess
 import sys
 import time
@@ -122,6 +126,12 @@ def fastest(exes, nams):
     return {k: min(v) for k, v in times.items()}
 
 
+def inner_iterations(nam):
+    lst = nam.with_suffix(".list").read_text(errors="ignore")
+    counts = re.findall(r"^(?:LA|BT|UR)\s+\d+\s+(\d+)", lst, re.MULTILINE)
+    return sum(int(c) for c in counts)
+
+
 def heads(nam):
     return flopy.utils.HeadFile(nam.with_suffix(".hds")).get_data()
 
@@ -150,23 +160,33 @@ def test_performance(name, ref_bin, tmp_path):
         wet = (np.abs(href) < 1e20) & (np.abs(h) < 1e20)
         assert np.allclose(h[wet], href[wet], atol=HEAD_ATOL), f"{k} heads"
 
-    RESULTS.append((name, t))
+    it = {k: inner_iterations(nams[k]) for k in nams}
+    per = {k: t[k] / it[k] for k in t}
+    RESULTS.append((name, t, it))
     for k in t:
         if k != "ref":
-            print(f"\n{name} {k}: {t[k]:.2f} s, reference {t['ref']:.2f} s")
-    assert t["new"] <= SLOWDOWN * t["ref"], f"{name} slower than reference"
-    if "active" in t:
-        assert t["active"] <= SLOWDOWN * t["ref"], f"{name} active slower"
+            print(
+                f"\n{name} {k}: {t[k]:.2f} s, {it[k]} iterations, "
+                f"reference {t['ref']:.2f} s, {it['ref']} iterations"
+            )
+    for k in t:
+        if k != "ref":
+            assert per[k] <= SLOWDOWN * per["ref"], f"{name} {k} slower"
 
 
 def teardown_module():
     if not RESULTS:
         return
-    print("\n\n| Case | Reference (s) | This build (s) | Ratio | Active nodes (s) |")
-    print("|---|---|---|---|---|")
-    for name, t in RESULTS:
-        active = f"{t['active']:.2f}" if "active" in t else ""
-        print(
-            f"| {name} | {t['ref']:.2f} | {t['new']:.2f} "
-            f"| {t['new'] / t['ref']:.2f} | {active} |"
-        )
+    print(
+        "\n\n| Case | Run | Time (s) | Inner iterations | ms per iteration "
+        "| Ratio per iteration |"
+    )
+    print("|---|---|---|---|---|---|")
+    for name, t, it in RESULTS:
+        ref = t["ref"] / it["ref"]
+        for k in t:
+            per = t[k] / it[k]
+            print(
+                f"| {name} | {k} | {t[k]:.2f} | {it[k]} | {1e3 * per:.2f} "
+                f"| {per / ref:.2f} |"
+            )

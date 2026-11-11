@@ -356,6 +356,17 @@ C           RESET POINTER FOR IW TO ZERO
             WC(jcol) = DZERO
           END DO
         END DO MAIN
+C---------SCALE THE UPPER ENTRIES BY THE INVERSE OF THE DIAGONAL FOR
+C         SPCGU_ILU0A, AFTER THE FACTORIZATION HAS USED THEM
+        IF ( IZERO.EQ.0 ) THEN
+          DO n = 1, NIAC
+            iu  = JAPC(n)
+            ic1 = IAPC(n+1) - 1
+            DO j = iu, ic1
+              APC(j) = APC(j) * APC(n)
+            END DO
+          END DO
+        END IF
 !        do n = 1, niac
 !          ic0 = IAPC(n)
 !          ic1 = IAPC(n+1) - 1
@@ -407,18 +418,18 @@ C         FORWARD SOLVE - APC * D = R
           END DO LOWER
           D(n) = t
         END DO FORWARD
-C         BACKWARD SOLVE - D = D / U
+C         BACKWARD SOLVE - D = D / U, WITH THE UPPER ENTRIES SCALED BY
+C         THE INVERSE OF THE DIAGONAL. THE NEAREST COLUMN, SOLVED JUST
+C         BEFORE THIS ROW, IS SUBTRACTED LAST TO SHORTEN THE DEPENDENCY
         BACKWARD: DO n = NIAC, 1, -1
-          ic0 = IAPC(n)
           ic1 = IAPC(n+1) - 1
           iu  = JAPC(n)
-          t   = D(n)
-          UPPER: DO j = iu, ic1
+          t   = D(n) * APC(n)
+          UPPER: DO j = ic1, iu, -1
             jcol = JAPC(j)
             t    = t - APC(j) * D(jcol)
           END DO UPPER
-C           COMPUTE D FOR DIAGONAL - D = D / U
-          D(n) =  t * APC(n)
+          D(n) = t
         END DO BACKWARD
 C---------RETURN
         RETURN
