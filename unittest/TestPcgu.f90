@@ -5,7 +5,7 @@
 !<
 module TestPcgu
   use testdrive, only: check, error_type, new_unittest, unittest_type
-  use PCGUMODULE, only: SPCGU_PCCRS, SPCGU_PCU, SPCGU_PCILU0
+  use PCGULIBMODULE, only: SPCGU_PCCRS, SPCGU_PCU, SPCGU_PCILU0
   implicit none
   private
   public :: collect_pcgu
