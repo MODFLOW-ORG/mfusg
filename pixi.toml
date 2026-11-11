@@ -22,6 +22,7 @@ build = "meson install -C"
 
 # tests
 test = { cmd = "pytest -v -n auto", cwd = "autotest" }
+perf = { cmd = "pytest -v -s performance.py", cwd = "autotest" }
 unittest = "meson test --verbose --no-rebuild -C"
 
 # get ostag for system

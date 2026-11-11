@@ -630,8 +630,8 @@ C--------------------------------------------------------------
         ELSEIF(LINMETH.EQ.2)THEN
 C2B---------CALL PCGC SOLVER
 C
-          CALL PCGU7U1AP(AMAT, RHS, SOLN, IA, JA,
-     &               ICNVG,KSTP,KPER,MXITER,KITER,IN_ITER,IOUT)
+          CALL PCGU7U1AP(AMAT, RHS, SOLN, IBND,
+     &               ICNVG,KSTP,KITER,IN_ITER)
         ENDIF
 C
 C ----------------------------------------------------------------------

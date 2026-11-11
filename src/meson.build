@@ -29,6 +29,8 @@ mfusg_sources = files(
  'lak_gag_sfr_modules.f',
  'parutl7.f',
  'pcgu7.f',
+ 'pcgu7lib.f',
+ 'pcgu7solver.f90',
  'sparse.f',
  'utl7u1.f',
  'xmd.f',
