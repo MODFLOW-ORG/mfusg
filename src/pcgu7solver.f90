@@ -59,6 +59,10 @@ module PCGUSOLVERMODULE
     ! scaling
     double precision, allocatable, dimension(:) :: dscale
     double precision, allocatable, dimension(:) :: dscale2
+    ! factors that return the residual and head change to model units,
+    ! in the order of the system passed to the linear accelerators
+    double precision, allocatable, dimension(:) :: rscale
+    double precision, allocatable, dimension(:) :: hscale
     ! active node ordering
     integer, allocatable, dimension(:) :: lorder_act
     integer, allocatable, dimension(:) :: iorder_act
@@ -90,6 +94,7 @@ module PCGUSOLVERMODULE
     procedure :: solve
     procedure :: destroy
     procedure, private :: reorder
+    procedure, private :: set_cnvg_scale
     procedure, private :: cg
     procedure, private :: bcgs
   end type pcgusolver
@@ -158,9 +163,13 @@ contains
     if (iscl /= 0) nscl = nia
     allocate (this%dscale(nscl))
     allocate (this%dscale2(nscl))
+    allocate (this%rscale(nscl))
+    allocate (this%hscale(nscl))
     do n = 1, nscl
       this%dscale(n) = 1.0d0
       this%dscale2(n) = 1.0d0
+      this%rscale(n) = 1.0d0
+      this%hscale(n) = 1.0d0
     end do
 
     ! preconditioner
@@ -301,6 +310,7 @@ contains
         call SPCGU_SCALE(0, this%iscl, this%nia_all, this%nnz_all, &
                          this%ia, this%ja, this%a1, this%x, this%b, &
                          this%dscale, this%dscale2)
+        call this%set_cnvg_scale()
       end if
     else
       do n = 1, this%nnz_all
@@ -310,6 +320,7 @@ contains
         call SPCGU_SCALE(0, this%iscl, this%nia_all, this%nnz_all, &
                          this%ia, this%ja, this%a, this%x, this%b, &
                          this%dscale, this%dscale2)
+        call this%set_cnvg_scale()
       end if
       call this%reorder(ibound)
     end if
@@ -343,6 +354,7 @@ contains
       tv = this%b(n) - this%d(n)
       this%d(n) = tv
       if (abs(tv) > rmax) rmax = abs(tv)
+      if (this%iscl /= 0) tv = tv * this%rscale(n)
       this%l2norm0 = this%l2norm0 + tv * tv
     end do
     this%l2norm0 = sqrt(this%l2norm0)
@@ -372,6 +384,19 @@ contains
     end do
   end subroutine solve
 
+  !> @brief Set the factors that return the residual and head change to
+  !! model units, before the system is reordered
+  !<
+  subroutine set_cnvg_scale(this)
+    class(pcgusolver), intent(inout) :: this
+    integer :: n
+
+    do n = 1, this%nia_all
+      this%rscale(n) = 1.0d0 / this%dscale(n)
+      this%hscale(n) = this%dscale2(n)
+    end do
+  end subroutine set_cnvg_scale
+
   !> @brief Reorder the scaled system into a1, ia1, and ja1
   !!
   !! The active node ordering is recalculated when IBOUND changes.
@@ -387,6 +412,10 @@ contains
                  this%ia1, this%lorder, this%id, 1)
       call VPERM(this%nia, this%x, this%lorder)
       call VPERM(this%nia, this%b, this%lorder)
+      if (this%iscl /= 0) then
+        call VPERM(this%nia, this%rscale, this%lorder)
+        call VPERM(this%nia, this%hscale, this%lorder)
+      end if
       return
     end if
 
@@ -439,12 +468,20 @@ contains
     end do
     call VPERM(this%nia_all, this%x, this%lorder_act)
     call VPERM(this%nia_all, this%b, this%lorder_act)
+    if (this%iscl /= 0) then
+      call VPERM(this%nia_all, this%rscale, this%lorder_act)
+      call VPERM(this%nia_all, this%hscale, this%lorder_act)
+    end if
 
     if (this%iord /= 0) then
       call DPERM(this%nia, this%a0, this%ja0, this%ia0, this%a1, this%ja1, &
                  this%ia1, this%lorder, this%id, 1)
       call VPERM(this%nia, this%x, this%lorder)
       call VPERM(this%nia, this%b, this%lorder)
+      if (this%iscl /= 0) then
+        call VPERM(this%nia, this%rscale, this%lorder)
+        call VPERM(this%nia, this%hscale, this%lorder)
+      end if
     else
       do n = 1, this%nnz
         this%a1(n) = this%a0(n)
@@ -503,9 +540,11 @@ contains
       do n = 1, this%nia
         tv = alpha * this%p(n)
         this%x(n) = this%x(n) + tv
+        if (this%iscl /= 0) tv = tv * this%hscale(n)
         deltax = max(abs(tv), deltax)
         tv = this%d(n) - alpha * this%q(n)
         this%d(n) = tv
+        if (this%iscl /= 0) tv = tv * this%rscale(n)
         rmax = max(abs(tv), rmax)
         l2norm = l2norm + tv * tv
       end do
@@ -588,7 +627,7 @@ contains
       rmax = DZERO
       do n = 1, this%nia
         tv = this%q(n)
-        if (this%iscl /= 0) tv = tv / this%dscale(n)
+        if (this%iscl /= 0) tv = tv * this%rscale(n)
         if (abs(tv) > abs(rmax)) rmax = tv
       end do
       if (abs(rmax) <= machprec) then
@@ -596,7 +635,7 @@ contains
         do n = 1, this%nia
           tv = alpha * this%phat(n)
           this%x(n) = this%x(n) + tv
-          if (this%iscl /= 0) tv = tv * this%dscale(n)
+          if (this%iscl /= 0) tv = tv * this%hscale(n)
           if (abs(tv) > abs(deltax)) deltax = tv
         end do
         call SPCGU_TESTCNVG(this%icnvgopt, icnvg, deltax, abs(rmax), &
@@ -626,11 +665,11 @@ contains
       do n = 1, this%nia
         tv = alpha * this%phat(n) + omega * this%qhat(n)
         this%x(n) = this%x(n) + tv
-        if (this%iscl /= 0) tv = tv * this%dscale(n)
+        if (this%iscl /= 0) tv = tv * this%hscale(n)
         if (abs(tv) > abs(deltax)) deltax = tv
         tv = this%q(n) - omega * this%t(n)
         this%d(n) = tv
-        if (this%iscl /= 0) tv = tv / this%dscale(n)
+        if (this%iscl /= 0) tv = tv * this%rscale(n)
         if (abs(tv) > abs(rmax)) rmax = tv
         l2norm = l2norm + tv * tv
       end do
@@ -662,7 +701,7 @@ contains
     deallocate (this%ia, this%ja, this%ibound)
     deallocate (this%a, this%x, this%b)
     deallocate (this%iapc, this%japc, this%apc, this%iw, this%w)
-    deallocate (this%dscale, this%dscale2)
+    deallocate (this%dscale, this%dscale2, this%rscale, this%hscale)
     deallocate (this%lorder_act, this%iorder_act)
     deallocate (this%ia0, this%ja0, this%a0)
     deallocate (this%lorder, this%iorder, this%id)
