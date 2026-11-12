@@ -5,7 +5,8 @@
 !<
 module TestPcgu
   use testdrive, only: check, error_type, new_unittest, unittest_type
-  use PCGULIBMODULE, only: SPCGU_PCCRS, SPCGU_PCU, SPCGU_PCILU0
+  use PCGULIBMODULE, only: SPCGU_PCCRS, SPCGU_PCU, SPCGU_PCILU0, &
+                           SPCGU_ILU0A
   implicit none
   private
   public :: collect_pcgu
@@ -27,7 +28,8 @@ contains
                 new_unittest("ilu0_diagonal", test_ilu0_diagonal), &
                 new_unittest("milu0_return", test_milu0_return), &
                 new_unittest("milu0_small_pivot", test_milu0_small_pivot), &
-                new_unittest("milu0_shift_limit", test_milu0_shift_limit) &
+                new_unittest("milu0_shift_limit", test_milu0_shift_limit), &
+                new_unittest("ilu0_apply_exact", test_ilu0_apply_exact) &
                 ]
   end subroutine collect_pcgu
 
@@ -107,5 +109,51 @@ contains
     if (allocated(error)) return
     call check(error, apc(2), 1.0d0 / dtiny, rel=.true., thr=tol)
   end subroutine test_milu0_shift_limit
+
+  !> @brief ILU0 and MILU0 of a tridiagonal matrix drop no fill, so
+  !! applying them solves the system
+  !<
+  subroutine test_ilu0_apply_exact(error)
+    type(error_type), allocatable, intent(out) :: error
+    integer, parameter :: nt = 6
+    integer, parameter :: nzt = 3 * nt - 2
+    integer :: ia(nt + 1), ja(nzt), iapc(nt + 1), japc(nzt), iw(nt + 1)
+    double precision :: ac(nzt), apc(nzt), w(nt), r(nt), d(nt), ad(nt)
+    integer :: n, j, nz, ipc
+
+    nz = 0
+    do n = 1, nt
+      ia(n) = nz + 1
+      nz = nz + 1
+      ja(nz) = n
+      ac(nz) = 2.5d0 + 0.1d0 * n
+      if (n > 1) then
+        nz = nz + 1
+        ja(nz) = n - 1
+        ac(nz) = -1.0d0
+      end if
+      if (n < nt) then
+        nz = nz + 1
+        ja(nz) = n + 1
+        ac(nz) = -1.0d0 - 0.05d0 * n
+      end if
+      r(n) = 1.0d0 + 0.5d0 * n
+    end do
+    ia(nt + 1) = nz + 1
+    do ipc = 2, 3
+      call SPCGU_PCCRS(nt, nzt, ia, ja, iapc, japc, iw)
+      call SPCGU_PCU(iout, nzt, nt, nt, nzt, nzt, ipc, 0.97, &
+                     ac, ia, ja, apc, iapc, japc, iw, w)
+      call SPCGU_ILU0A(nzt, nt, apc, iapc, japc, r, d)
+      do n = 1, nt
+        ad(n) = 0.0d0
+        do j = ia(n), ia(n + 1) - 1
+          ad(n) = ad(n) + ac(j) * d(ja(j))
+        end do
+        call check(error, ad(n), r(n), thr=tol)
+        if (allocated(error)) return
+      end do
+    end do
+  end subroutine test_ilu0_apply_exact
 
 end module TestPcgu
