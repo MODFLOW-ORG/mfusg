@@ -31,7 +31,9 @@ contains
                 new_unittest("inactive", test_inactive), &
                 new_unittest("inactive_ordering", test_inactive_ordering), &
                 new_unittest("active_set_change", test_active_set_change), &
-                new_unittest("constant_head", test_constant_head) &
+                new_unittest("constant_head", test_constant_head), &
+                new_unittest("residual_units", test_residual_units), &
+                new_unittest("head_change_units", test_head_change_units) &
                 ]
   end subroutine collect_pcgusolver
 
@@ -299,5 +301,120 @@ contains
     if (allocated(error)) return
     call check(error, errmax < tol, "constant head solution")
   end subroutine test_constant_head
+
+  !> @brief Fill the grid with conductances from 1e3 to 1e5
+  !<
+  subroutine setup_conductance(ia, ja, ac, nnz, htrue)
+    integer, intent(out) :: ia(neq + 1), ja(maxnnz)
+    double precision, intent(out) :: ac(maxnnz)
+    integer, intent(out) :: nnz
+    double precision, intent(out) :: htrue(neq)
+    double precision :: cond(neq)
+    integer :: n, j, idiag
+
+    call setup(ia, ja, ac, nnz, htrue)
+    do n = 1, neq
+      cond(n) = 10.0d0**(3 + mod(7 * n, 3))
+    end do
+    do n = 1, neq
+      idiag = ia(n)
+      ac(idiag) = 1.0d-3 * cond(n)
+      do j = ia(n) + 1, ia(n + 1) - 1
+        ac(j) = -0.5d0 * (cond(n) + cond(ja(j)))
+        ac(idiag) = ac(idiag) - ac(j)
+      end do
+    end do
+  end subroutine setup_conductance
+
+  !> @brief Solve the conductance grid and return the largest residual in
+  !! the active rows and the largest error
+  !<
+  subroutine run_conductance(ilinmeth, ipc, iscl, iord, iaord, hcls, rcls, &
+                             rmax, errmax)
+    integer, intent(in) :: ilinmeth, ipc, iscl, iord, iaord
+    real, intent(in) :: hcls, rcls
+    double precision, intent(out) :: rmax, errmax
+    type(pcgusolver) :: solver
+    integer :: ia(neq + 1), ja(maxnnz), ibound(neq), nnz, n
+    integer :: icnvg, innerit
+    double precision :: ac(maxnnz), htrue(neq), rhs(neq), hnew(neq), r(neq)
+
+    ibound = 1
+    if (iaord /= 0) ibound(6) = 0
+    call setup_conductance(ia, ja, ac, nnz, htrue)
+    call boundary(ia, ja, ac, ibound, htrue, rhs)
+    do n = 1, neq
+      hnew(n) = 0.0d0
+      if (ibound(n) <= 0) hnew(n) = htrue(n)
+    end do
+    call solver%init(iout, 0, 500, ilinmeth, ipc, iscl, iord, iaord, 0, &
+                     hcls, rcls, 0.97, neq, nnz, ia, ja)
+    call solver%solve(2, 1, ibound, ac, hnew, rhs, icnvg, innerit)
+    call solver%destroy()
+    call matvec(ia, ja, ac, hnew, r)
+    rmax = 0.0d0
+    errmax = 0.0d0
+    do n = 1, neq
+      if (ibound(n) <= 0) cycle
+      rmax = max(rmax, abs(rhs(n) - r(n)))
+      errmax = max(errmax, abs(hnew(n) - htrue(n)))
+    end do
+  end subroutine run_conductance
+
+  !> @brief RCLOSE limits the residual in model units with scaling and
+  !! ordering
+  !<
+  subroutine test_residual_units(error)
+    type(error_type), allocatable, intent(out) :: error
+    real, parameter :: rcls = 1.0
+    integer :: ilinmeth, iscl, iord, iaord
+    double precision :: rmax, errmax
+    character(len=64) :: msg
+
+    do ilinmeth = 1, 2
+      do iscl = 1, 2
+        do iord = 0, 2
+          do iaord = 0, 1
+            ! l2 norm scaling is not symmetric, so it is not used with CG
+            if (ilinmeth == 1 .and. iscl == 2) cycle
+            call run_conductance(ilinmeth, 2, iscl, iord, iaord, 1.0e10, &
+                                 rcls, rmax, errmax)
+            write (msg, '(a,4i2,a,es10.3)') 'ilinmeth iscl iord iaord', &
+              ilinmeth, iscl, iord, iaord, ' residual', rmax
+            call check(error, rmax <= dble(rcls), trim(msg))
+            if (allocated(error)) return
+          end do
+        end do
+      end do
+    end do
+  end subroutine test_residual_units
+
+  !> @brief HCLOSE limits the head change in model units with scaling and
+  !! ordering, so the error is near HCLOSE
+  !<
+  subroutine test_head_change_units(error)
+    type(error_type), allocatable, intent(out) :: error
+    real, parameter :: hcls = 1.0e-6
+    integer :: ilinmeth, iscl, iord, iaord
+    double precision :: rmax, errmax
+    character(len=64) :: msg
+
+    do ilinmeth = 1, 2
+      do iscl = 1, 2
+        do iord = 0, 2
+          do iaord = 0, 1
+            ! l2 norm scaling is not symmetric, so it is not used with CG
+            if (ilinmeth == 1 .and. iscl == 2) cycle
+            call run_conductance(ilinmeth, 2, iscl, iord, iaord, hcls, &
+                                 1.0e10, rmax, errmax)
+            write (msg, '(a,4i2,a,es10.3)') 'ilinmeth iscl iord iaord', &
+              ilinmeth, iscl, iord, iaord, ' error', errmax
+            call check(error, errmax <= 1.0d2 * dble(hcls), trim(msg))
+            if (allocated(error)) return
+          end do
+        end do
+      end do
+    end do
+  end subroutine test_head_change_units
 
 end module TestPcguSolver
